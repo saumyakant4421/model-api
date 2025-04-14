@@ -1,6 +1,4 @@
 /package-lock.json
-/package.json
-
 .venv/
 node_modules/
 /firebaseServiceAccountKey.json
@@ -10,3 +8,4 @@ movie_recommendation_model.keras
 tfidf.pkl
 top_cast.pkl
 top_directors.pkl
+*.log
