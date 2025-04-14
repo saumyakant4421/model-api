@@ -4,6 +4,7 @@
 .venv/
 node_modules/
 /firebaseServiceAccountKey.json
+/firebase-adminsdk.json
 mlb_genres.pkl
 movie_recommendation_model.keras
 tfidf.pkl
