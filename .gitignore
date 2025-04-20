@@ -1,35 +1,11 @@
-# Node.js
-node_modules/
-package-lock.json
-npm-debug.log
-*.log
-
-# Python/Colab
+/package-lock.json
 .venv/
-__pycache__/
-*.pyc
-.ipynb_checkpoints/
-X.npy
-y.npy
-saved_model/
+node_modules/
+/firebaseServiceAccountKey.json
+/firebase-adminsdk.json
+mlb_genres.pkl
 movie_recommendation_model.keras
-
-# Sensitive files
-.env
-*.env
-firebaseServiceAccountKey.json
-firebase-adminsdk.json
-secrets/
-*.key
-*.pem
-
-# Temporary files
-*.tmp
-*.bak
-*.swp
-
-# Preprocessors (include if needed by API)
-# mlb_genres.pkl
-# tfidf.pkl
-# top_cast.pkl
-# top_directors.pkl
+tfidf.pkl
+top_cast.pkl
+top_directors.pkl
+*.log

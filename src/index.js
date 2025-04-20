@@ -14,8 +14,9 @@ let model;
 let modelLoaded = false;
 (async () => {
   try {
-    // Use tf.io.fileSystem for local file access
-    model = await tf.loadLayersModel(tf.io.fileSystem('./tfjs_model/model.json'));
+    // Explicitly use tf.io.fileSystem for local file access
+    const ioHandler = tf.io.fileSystem('./tfjs_model/model.json');
+    model = await tf.loadLayersModel(ioHandler);
     modelLoaded = true;
     console.log('Model loaded');
   } catch (e) {
