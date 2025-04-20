@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const tf = require('@tensorflow/tfjs-core');
+const tf = require('@tensorflow/tfjs');
 const axios = require('axios');
 const { loadMovies, extractFeatures } = require('./preprocess');
 
