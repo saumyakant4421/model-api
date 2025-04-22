@@ -1,119 +1,62 @@
 const express = require('express');
-const cors = require('cors');
 const tf = require('@tensorflow/tfjs');
 require('@tensorflow/tfjs-node'); // Enable Node.js backend
 const fs = require('fs').promises;
-const axios = require('axios');
-const { loadMovies, extractFeatures } = require('./preprocess');
+const { loadMovies } = require('./src/preprocess');
 
 const app = express();
+const port = process.env.PORT || 10000;
 
-app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 let model;
-let modelLoaded = false;
-(async () => {
+let movies;
+
+// Load model
+async function loadModel() {
   try {
-    // Fallback: Read model.json using fs and load with tf.io.fromMemory
     const modelJson = JSON.parse(await fs.readFile('./tfjs_model/model.json', 'utf8'));
     model = await tf.loadLayersModel(tf.io.fromMemory(modelJson));
-    modelLoaded = true;
-    console.log('Model loaded');
-  } catch (e) {
-    console.error('Model load error:', e);
+    console.log('Model loaded successfully');
+  } catch (error) {
+    console.error('Model load error:', error);
+    process.exit(1);
   }
-})();
+}
 
-let movies;
-let moviesLoaded = false;
-(async () => {
+// Load movies
+async function loadMoviesWrapper() {
   try {
     movies = await loadMovies();
-    moviesLoaded = true;
-    console.log('Movies loaded:', movies.length);
-  } catch (e) {
-    console.error('Movies load error:', e);
-  }
-})();
-
-const TMDB_API_KEY = process.env.TMDB_API_KEY;
-const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-
-app.post('/recommend', async (req, res) => {
-  if (!modelLoaded || !moviesLoaded) {
-    return res.status(503).json({ error: 'Service not ready: Model or movies not loaded' });
-  }
-  try {
-    const { watchlist = [], watched = [] } = req.body;
-    if (!Array.isArray(watchlist) || !Array.isArray(watched)) {
-      return res.status(400).json({ error: 'watchlist and watched must be arrays' });
-    }
-
-    const userPrefs = {
-      genres: [],
-      keywords: [],
-      cast: [],
-      director: ''
-    };
-    for (const movieId of watched) {
-      const movie = movies.find(m => m.id === movieId);
-      if (movie) {
-        userPrefs.genres.push(...movie.genres);
-        userPrefs.keywords.push(...movie.overview.toLowerCase().split(/\s+/).filter(w => w.length > 4));
-        userPrefs.cast.push(...movie.cast);
-        if (movie.director) userPrefs.director = movie.director;
-      }
-    }
-    userPrefs.genres = [...new Set(userPrefs.genres)];
-    userPrefs.keywords = [...new Set(userPrefs.keywords)];
-    userPrefs.cast = [...new Set(userPrefs.cast)];
-
-    const candidates = movies.filter(m => !watchlist.includes(m.id) && !watched.includes(m.id));
-    if (!candidates.length) {
-      return res.json({ recommendations: [] });
-    }
-
-    const features = candidates.map(m => extractFeatures(m, userPrefs));
-    const X = tf.tensor2d(features);
-    const scores = model.predict(X).dataSync();
-    X.dispose();
-
-    const topIndices = scores
-      .map((score, idx) => ({ score, idx }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8)
-      .map(item => item.idx);
-
-    const recommendations = await Promise.all(
-      topIndices.map(async idx => {
-        const movie = candidates[idx];
-        try {
-          if (!TMDB_API_KEY) throw new Error('No TMDB API key');
-          const response = await axios.get(`${TMDB_BASE_URL}/movie/${movie.id}`, {
-            params: { api_key: TMDB_API_KEY }
-          });
-          return {
-            id: movie.id,
-            title: response.data.title,
-            poster_path: response.data.poster_path,
-            vote_average: response.data.vote_average
-          };
-        } catch {
-          return { id: movie.id, title: movie.title };
-        }
-      })
-    );
-
-    res.json({ recommendations });
+    console.log(`Movies loaded: ${movies.length}`);
   } catch (error) {
-    console.error('Recommendation error:', error);
-    res.status(500).json({ error: 'Failed to fetch recommendations' });
+    console.error('Error loading movies:', error);
+    movies = [];
   }
-});
+}
 
-app.get('/recommend', (req, res) => {
-  res.status(400).json({ error: 'Use POST /recommend with watchlist and watched arrays' });
-});
+// Initialize server
+async function startServer() {
+  await loadModel();
+  await loadMoviesWrapper();
+  console.log(`Processed ${movies.length} movies`);
 
-module.exports = app;
+  app.get('/recommend', async (req, res) => {
+    try {
+      const features = tf.zeros([1, model.inputs[0].shape[1]]);
+      const prediction = model.predict(features);
+      const score = prediction.dataSync()[0];
+      features.dispose();
+      prediction.dispose();
+      res.json({ message: 'Test prediction', score });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+  });
+}
+
+startServer();
