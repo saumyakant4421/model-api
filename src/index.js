@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const tf = require('@tensorflow/tfjs');
 require('@tensorflow/tfjs-node'); // Enable Node.js backend
+const fs = require('fs').promises;
 const axios = require('axios');
 const { loadMovies, extractFeatures } = require('./preprocess');
 
@@ -14,9 +15,9 @@ let model;
 let modelLoaded = false;
 (async () => {
   try {
-    // Explicitly use tf.io.fileSystem for local file access
-    const ioHandler = tf.io.fileSystem('./tfjs_model/model.json');
-    model = await tf.loadLayersModel(ioHandler);
+    // Fallback: Read model.json using fs and load with tf.io.fromMemory
+    const modelJson = JSON.parse(await fs.readFile('./tfjs_model/model.json', 'utf8'));
+    model = await tf.loadLayersModel(tf.io.fromMemory(modelJson));
     modelLoaded = true;
     console.log('Model loaded');
   } catch (e) {
