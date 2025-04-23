@@ -2,56 +2,43 @@ const fs = require('fs');
 const csv = require('csv-parser');
 
 async function loadMovies() {
-  const movies = [];
   return new Promise((resolve, reject) => {
+    const movies = [];
     fs.createReadStream('data/movies.csv')
       .pipe(csv())
       .on('data', (row) => {
         try {
-          // Safely parse JSON columns
-          row.genres = safeParseJSON(row.genres, row.id, 'genres');
-          row.cast = safeParseJSON(row.cast, row.id, 'cast');
-          row.id = parseInt(row.id);
-          // Validate required fields
-          if (row.genres && row.cast && row.id) {
-            movies.push(row);
+          const movie = {
+            id: parseInt(row.id),
+            title: row.title,
+            genres: JSON.parse(row.genres),
+            overview: row.overview,
+            cast: JSON.parse(row.cast),
+            director: row.director
+          };
+          if (movie.id && movie.title && movie.genres.length && movie.cast.length) {
+            movies.push(movie);
           } else {
-            console.warn(`Skipping row ${row.id}: Missing or invalid data`);
+            console.log('Skipping row, ID:', row.id, row);
           }
         } catch (e) {
-          console.error(`Error parsing row ${row.id}: ${e.message}`);
+          console.log('Skipping row due to error, ID:', row.id, e.message);
         }
       })
       .on('end', () => {
         console.log(`Processed ${movies.length} movies`);
         resolve(movies);
       })
-      .on('error', (e) => {
-        reject(e);
-      });
+      .on('error', (e) => reject(e));
   });
 }
 
-function safeParseJSON(value, rowId, field) {
-  if (!value) {
-    console.warn(`Empty ${field} in row ${rowId}`);
-    return [];
-  }
-  try {
-    // Remove problematic characters or fix common issues
-    value = value.replace(/\\(?![\\"])/g, '\\\\'); // Escape unescaped backslashes
-    return JSON.parse(value);
-  } catch (e) {
-    console.error(`Invalid ${field} in row ${rowId}: ${value} - ${e.message}`);
-    return [];
-  }
-}
-
 function extractFeatures(movie, userPrefs) {
-  // Ensure genres and cast are arrays
-  const genres = Array.isArray(movie.genres) ? movie.genres : [];
-  const cast = Array.isArray(movie.cast) ? movie.cast : [];
-  return [...genres, ...cast].map(v => userPrefs.genres.includes(v) || userPrefs.cast.includes(v) ? 1 : 0);
+  const genreMatch = movie.genres.some(g => userPrefs.genres.includes(g)) ? 1 : 0;
+  const castMatch = movie.cast.some(c => userPrefs.cast.includes(c)) ? 1 : 0;
+  const directorMatch = movie.director === userPrefs.director ? 1 : 0;
+  const keywordMatch = movie.overview.toLowerCase().split(/\s+/).some(w => userPrefs.keywords.includes(w)) ? 1 : 0;
+  return [genreMatch, castMatch, directorMatch, keywordMatch];
 }
 
 module.exports = { loadMovies, extractFeatures };
