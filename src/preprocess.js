@@ -11,12 +11,13 @@ async function loadMovies() {
           const movie = {
             id: parseInt(row.id),
             title: row.title,
-            genres: JSON.parse(row.genres),
-            overview: row.overview,
-            cast: JSON.parse(row.cast),
-            director: row.director
+            genres: row.genres ? JSON.parse(row.genres) : [],
+            overview: row.overview || '',
+            cast: row.cast ? JSON.parse(row.cast) : [],
+            director: row.director || '',
+            release_date: row.release_date || '' // Add release_date
           };
-          if (movie.id && movie.title && movie.genres.length && movie.cast.length) {
+          if (movie.id && movie.title) {
             movies.push(movie);
           } else {
             console.log('Skipping row, ID:', row.id, row);
