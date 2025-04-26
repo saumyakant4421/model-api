@@ -1,7 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const tf = require('@tensorflow/tfjs');
-require('@tensorflow/tfjs-node');
 const fs = require('fs').promises;
 const axios = require('axios');
 const { loadMovies, extractFeatures } = require('./preprocess');
@@ -11,19 +9,6 @@ const port = process.env.PORT || 10000;
 
 app.use(cors({ origin: '*' }));
 app.use(express.json());
-
-let model;
-let modelLoaded = false;
-(async () => {
-  try {
-    const modelJson = JSON.parse(await fs.readFile('./tfjs_model/model.json', 'utf8'));
-    model = await tf.loadLayersModel(tf.io.fromMemory(modelJson));
-    modelLoaded = true;
-    console.log('Model loaded');
-  } catch (e) {
-    console.error('Model load error:', e);
-  }
-})();
 
 let movies;
 let moviesLoaded = false;
@@ -40,9 +25,21 @@ let moviesLoaded = false;
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
+// Compute similarity score without a model
+function computeSimilarity(features) {
+  // Features: [genreMatch, castMatch, directorMatch, keywordMatch]
+  // Weighted sum: genre (40%), cast (30%), director (20%), keywords (10%)
+  return (
+    features[0] * 0.4 +
+    features[1] * 0.3 +
+    features[2] * 0.2 +
+    features[3] * 0.1
+  );
+}
+
 app.post('/recommend', async (req, res) => {
-  if (!modelLoaded || !moviesLoaded) {
-    return res.status(503).json({ error: 'Service not ready: Model or movies not loaded' });
+  if (!moviesLoaded) {
+    return res.status(503).json({ error: 'Service not ready: Movies not loaded' });
   }
   try {
     const { watchlist = [], watched = [] } = req.body;
@@ -74,20 +71,19 @@ app.post('/recommend', async (req, res) => {
       return res.json({ recommendations: [] });
     }
 
-    const features = candidates.map(m => extractFeatures(m, userPrefs));
-    const X = tf.tensor2d(features);
-    const scores = model.predict(X).dataSync();
-    X.dispose();
+    const scoredMovies = candidates.map(movie => {
+      const features = extractFeatures(movie, userPrefs);
+      const score = computeSimilarity(features);
+      return { movie, score };
+    });
 
-    const topIndices = scores
-      .map((score, idx) => ({ score, idx }))
+    const topMovies = scoredMovies
       .sort((a, b) => b.score - a.score)
       .slice(0, 8)
-      .map(item => item.idx);
+      .map(item => item.movie);
 
     const recommendations = await Promise.all(
-      topIndices.map(async idx => {
-        const movie = candidates[idx];
+      topMovies.map(async movie => {
         try {
           if (!TMDB_API_KEY) throw new Error('No TMDB API key');
           const response = await axios.get(`${TMDB_BASE_URL}/movie/${movie.id}`, {
@@ -113,16 +109,20 @@ app.post('/recommend', async (req, res) => {
 });
 
 app.get('/recommend', (req, res) => {
-  if (!modelLoaded || !moviesLoaded) {
-    return res.status(503).json({ error: 'Service not ready: Model or movies not loaded' });
+  if (!moviesLoaded) {
+    return res.status(503).json({ error: 'Service not ready: Movies not loaded' });
   }
   try {
-    const features = tf.zeros([1, model.inputs[0].shape[1]]);
-    const prediction = model.predict(features);
-    const score = prediction.dataSync()[0];
-    features.dispose();
-    prediction.dispose();
-    res.json({ message: 'Test prediction', score });
+    // Return a random movie for testing
+    const randomIndex = Math.floor(Math.random() * movies.length);
+    const movie = movies[randomIndex];
+    res.json({
+      message: 'Test recommendation',
+      recommendation: {
+        id: movie.id,
+        title: movie.title
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
